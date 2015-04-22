@@ -12,7 +12,7 @@ from openmdao.main.mpiwrap import MPI, MPI_info, PETSc, get_norm, make_idx_array
                                   to_idx_array, idx_arr_type
 from openmdao.main.exceptions import RunStopped
 from openmdao.main.finite_difference import FiniteDifference, DirectionalFD
-from openmdao.main.linearsolver import ScipyGMRES, PETSc_KSP, LinearGS
+from openmdao.main.linearsolver import ScipyGMRES, PETSc_KSP, LinearGS, MATMAT
 from openmdao.main.mp_support import has_interface
 from openmdao.main.interfaces import IDriver, IAssembly, IImplicitComponent, \
                                      ISolver, IPseudoComp, IComponent, ISystem
@@ -798,6 +798,8 @@ class System(object):
                 self.ln_solver = ScipyGMRES(self)
             elif solver_choice == 'petsc_ksp':
                 self.ln_solver = PETSc_KSP(self)
+            elif solver_choice == 'matmat':
+                self.ln_solver = MATMAT(self)
             elif solver_choice == 'linear_gs':
                 self.ln_solver = LinearGS(self)
 
@@ -1462,7 +1464,7 @@ class AssemblySystem(SimpleSystem):
         options = self._comp.driver.gradient_options
 
         # If we can, use the new Jacobian-free method
-        if self.options.lin_solver == 'petsc_ksp':
+        if self.options.lin_solver == 'petsc_ksp' or 'matmat':
             self._nest_lin_solve = True
             #inner_system.ln_solver = None
             inner_system.set_options(self.mode, options)

@@ -80,7 +80,7 @@ class GradientOptions(VariableTree):
     #                          framework_var=True)
 
     # Linear Solver settings
-    lin_solver = Enum('scipy_gmres', ['scipy_gmres', 'petsc_ksp', 'linear_gs'],
+    lin_solver = Enum('scipy_gmres', ['scipy_gmres', 'petsc_ksp', 'linear_gs', 'matmat'],
                       desc='Method to use for gradient calculation',
                       framework_var=True)
 
@@ -101,7 +101,7 @@ class GradientOptions(VariableTree):
         # the multiprocessing package, we get errors due to broken socket connections
         # from PETSc, so use this flag to prevent PETSc from being imported unless it's
         # actually used.
-        if newls == 'petsc_ksp':
+        if newls == 'petsc_ksp' or 'matmat':
             PETSc.needs_ksp = True
 
 
