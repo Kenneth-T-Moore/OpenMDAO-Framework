@@ -1572,7 +1572,6 @@ class Assembly(Component):
         # be the last.  If a var name is a tuple, that indicates
         # it's a distributed var, so all ranks will be recorded
         for rank in range(self.mpi.comm.size-1, -1, -1):
-            print rank
             for v in allvars[rank]:
                 if isinstance(v, tuple): # it's a distributed var
                     print_ranks.setdefault(v, []).append(rank)

@@ -1251,6 +1251,46 @@ class SimpleSystem(System):
 
                 vec['du'][var][:] += vec['df'][var][:]
 
+    def applyJmatmat(self, variables, argmat, resmat, idx, under_parallel=False):
+
+        for arg, res in zip(argmat, resmat):
+
+            # Poke in the arg and current result
+            for name in idx:
+                start, end = idx[name]
+
+                if name not in self.sol_vec.keys():
+                    if under_parallel:
+
+                        parent = self
+                        while True:
+                            if name in parent.sol_vec.keys():
+                                solvec = parent.sol_vec
+                                rhsvec = parent.rhs_vec
+                                break
+                            parent = parent._parent_system
+
+                    else:
+                        continue
+                else:
+                    solvec = self.sol_vec
+                    rhsvec = self.rhs_vec
+
+                solvec[name][:] = arg[start:end]
+                rhsvec[name][:] = res[start:end]
+
+            print self.sol_vec.keys()
+            print 'before', self.sol_vec.array, self.rhs_vec.array
+            self.applyJ(variables)
+            print 'after', self.sol_vec.array, self.rhs_vec.array
+
+            # Pull out the result
+            for name in self.rhs_vec.keys():
+                start, end = idx[name]
+                res[start:end] += self.rhs_vec[name][:]
+
+        print self.name, argmat, resmat
+
     def solve_linear(self, options=None):
         """ Single linear solve solution applied to whatever input is sitting
         in the RHS vector."""
@@ -1813,6 +1853,17 @@ class CompoundSystem(System):
             if self.mode == 'adjoint':
                 self.scatter('du', 'dp')
 
+    def applyJmatmat(self, variables, argmat, resmat, idx, under_parallel=False):
+        """ Delegate to subsystems """
+
+        if self.is_active():
+            if self.mode == 'forward':
+                self.scatter('du', 'dp')
+            for subsystem in self.local_subsystems():
+                subsystem.applyJmatmat(variables, argmat, resmat, idx, under_parallel=under_parallel)
+            if self.mode == 'adjoint':
+                self.scatter('du', 'dp')
+
     def stop(self):
         self._stop = True
         for s in self.all_subsystems():
@@ -2149,6 +2200,18 @@ class ParallelSystem(CompoundSystem):
                 return True
 
         return False
+
+    def applyJmatmat(self, variables, argmat, resmat, idx, under_parallel=False):
+        """ Delegate to subsystems """
+
+        if self.is_active():
+            if self.mode == 'forward':
+                self.scatter('du', 'dp')
+            for subsystem in self.local_subsystems():
+                subsystem.applyJmatmat(variables, argmat, resmat, idx, under_parallel=True)
+            if self.mode == 'adjoint':
+                self.scatter('du', 'dp')
+
 
 class OpaqueSystem(SimpleSystem):
     """A system with an external interface like that

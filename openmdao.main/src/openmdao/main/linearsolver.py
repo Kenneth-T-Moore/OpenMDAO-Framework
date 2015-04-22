@@ -256,13 +256,24 @@ class MATMAT(ScipyGMRES):
 
     def __init__(self, system):
         """ Set up ScipyGMRES object """
+
+        if system.mode != 'adjoint':
+            msg = 'The matmat solver only supports the adjoint direction.'
+            raise RuntimeError(msg)
+
         super(ScipyGMRES, self).__init__(system)
 
-        n_edge = system.vec['f'].array.size
-        system.scope.get_var_print_ranks()
-        print system.scope.print_ranks
-        print system.local_var_sizes
-        print system.variables
+        # We need the whole vector to be local now.
+        # TODO: This won't work with distributed comps
+        self.global_indices = {}
+        n_edge = 0
+        for i, var in enumerate(system.variables):
+            local_sizes = system.local_var_sizes[:, i]
+            istart = n_edge
+            size = local_sizes.max()
+            iend = istart + size
+            self.global_indices[var] = (istart, iend)
+            n_edge += size
 
         system.rhs_buf = np.zeros((n_edge, ))
         system.sol_buf = np.zeros((n_edge, ))
@@ -270,31 +281,33 @@ class MATMAT(ScipyGMRES):
                                 matvec=self.mult,
                                 dtype=float)
 
+        self.argmat = np.zeros((system.mpi.size, n_edge))
+        self.resmat = np.zeros((system.mpi.size, n_edge))
+
     def mult(self, arg):
         """ GMRES Callback: applies Jacobian matrix. Mode is determined by the
         system."""
 
         system = self._system
-        system.sol_vec.array[:] = arg[:]
 
         # Start with a clean slate
         system.rhs_vec.array[:] = 0.0
         system.clear_dp()
+        self.resmat[:] = 0.0
 
         # Gather from all gmres instances that are solving separate problems
         # in parallel
-        print system.mpi.size, system.mpi.rank, len(system.sol_vec.array)
-        arg_matrix = np.zeros((system.mpi.size, len(system.sol_vec.array)))
+        system.mpi.comm.Allgather(arg, self.argmat)
 
         if system._parent_system:
             vnames = system._parent_system._relevant_vars
         else:
             vnames = system.flat_vars.keys()
-        system.applyJ(vnames)
+        system.applyJmatmat(vnames, self.argmat, self.resmat, self.global_indices)
 
-        #print system.name, 'mult: arg, result', arg, system.rhs_vec.array[:]
-        #print system.rhs_vec.keys()
-        return system.rhs_vec.array[:]
+        print "arg", self.argmat
+        print "result", self.resmat
+        return self.resmat[system.mpi.rank, :]
 
 
 class PETSc_KSP(LinearSolver):

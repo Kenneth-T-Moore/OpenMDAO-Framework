@@ -32,7 +32,10 @@ top.driver.add_constraint('comp3.y < 1000')
 top.driver.gradient_options.lin_solver = 'matmat'
 top.run()
 
-J = top.driver.calc_gradient(return_format='dict')
+#from openmdao.util.dotgraph import plot_system_tree
+#plot_system_tree(top._system)
+
+J = top.driver.calc_gradient(return_format='dict', mode='adjoint')
 
 
 print '15, -8'
