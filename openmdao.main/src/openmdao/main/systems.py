@@ -1259,35 +1259,73 @@ class SimpleSystem(System):
             for name in idx:
                 start, end = idx[name]
 
-                if name not in self.sol_vec.keys():
-                    if under_parallel:
+                if name in self.sol_vec:
+                    self.sol_vec[name][:] = arg[start:end]
+                    self.rhs_vec[name][:] = res[start:end]
 
-                        parent = self
-                        while True:
-                            if name in parent.sol_vec.keys():
-                                solvec = parent.sol_vec
-                                rhsvec = parent.rhs_vec
-                                break
-                            parent = parent._parent_system
-
-                    else:
-                        continue
                 else:
-                    solvec = self.sol_vec
-                    rhsvec = self.rhs_vec
+                    parent = self
+                    while True:
 
-                solvec[name][:] = arg[start:end]
-                rhsvec[name][:] = res[start:end]
+                        # If we hit the top system, then this var must not be in graph.
+                        if parent.sol_vec is None:
+                            break
+
+                        if name in parent.sol_vec.keys():
+                            parent.sol_vec[name][:] = arg[start:end]
+                            parent.rhs_vec[name][:] = res[start:end]
+                            break
+
+                        parent = parent._parent_system
+
 
             print self.sol_vec.keys()
-            print 'before', self.sol_vec.array, self.rhs_vec.array
+            print 'before', self.sol_vec.array, self.rhs_vec.array, self.vec['dp'].array
             self.applyJ(variables)
-            print 'after', self.sol_vec.array, self.rhs_vec.array
+            print 'after', self.sol_vec.array, self.rhs_vec.array, self.vec['dp'].array
 
-            # Pull out the result
-            for name in self.rhs_vec.keys():
+            # Pull out the du vec result
+            for name in idx:
                 start, end = idx[name]
-                res[start:end] += self.rhs_vec[name][:]
+
+                if name in self.sol_vec:
+                    res[start:end] += self.rhs_vec[name][:]
+
+                else:
+                    parent = self
+                    while True:
+
+                        # If we hit the top system, then this var must not be in graph.
+                        if parent.rhs_vec is None:
+                            break
+
+                        if name in parent.rhs_vec.keys():
+                            res[start:end] += parent.rhs_vec[name][:]
+                            break
+
+                        parent = parent._parent_system
+
+            # Pull out the dp vec result
+            for name in idx:
+                start, end = idx[name]
+
+                if name in self.vec['dp']:
+                    res[start:end] += self.vec['dp'][name][:]
+
+                else:
+                    parent = self
+                    while True:
+
+                        # If we hit the top system, then this var must not be in graph.
+                        if not parent:
+                            break
+
+                        if name in parent.vec['dp']:
+                            print "res key", name, parent.vec['dp']
+                            res[start:end] += parent.vec['dp'][name][:]
+                            break
+
+                        parent = parent._parent_system
 
         print self.name, argmat, resmat
 
