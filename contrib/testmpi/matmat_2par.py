@@ -38,5 +38,5 @@ top.run()
 J = top.driver.calc_gradient(return_format='dict', mode='adjoint')
 
 
-print '15, -8'
+print '-6, 20'
 print J

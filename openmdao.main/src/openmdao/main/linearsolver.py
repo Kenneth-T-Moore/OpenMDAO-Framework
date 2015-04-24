@@ -247,69 +247,6 @@ class ScipyGMRES(LinearSolver):
         return system.rhs_vec.array[:]
 
 
-class MATMAT(ScipyGMRES):
-    """ Special implementation of Scipy's GMRES Solver for simultaneous
-    solution of adjoints under MPI
-    """
-
-    ln_string = 'MATMAT'
-
-    def __init__(self, system):
-        """ Set up ScipyGMRES object """
-
-        if system.mode != 'adjoint':
-            msg = 'The matmat solver only supports the adjoint direction.'
-            raise RuntimeError(msg)
-
-        super(ScipyGMRES, self).__init__(system)
-
-        # We need the whole vector to be local now.
-        # TODO: This won't work with distributed comps
-        self.global_indices = {}
-        n_edge = 0
-        for i, var in enumerate(system.variables):
-            local_sizes = system.local_var_sizes[:, i]
-            istart = n_edge
-            size = local_sizes.max()
-            iend = istart + size
-            self.global_indices[var] = (istart, iend)
-            n_edge += size
-
-        system.rhs_buf = np.zeros((n_edge, ))
-        system.sol_buf = np.zeros((n_edge, ))
-        self.A = LinearOperator((n_edge, n_edge),
-                                matvec=self.mult,
-                                dtype=float)
-
-        self.argmat = np.zeros((system.mpi.size, n_edge))
-        self.resmat = np.zeros((system.mpi.size, n_edge))
-
-    def mult(self, arg):
-        """ GMRES Callback: applies Jacobian matrix. Mode is determined by the
-        system."""
-
-        system = self._system
-
-        # Start with a clean slate
-        system.rhs_vec.array[:] = 0.0
-        system.clear_dp()
-        self.resmat[:] = 0.0
-
-        # Gather from all gmres instances that are solving separate problems
-        # in parallel
-        system.mpi.comm.Allgather(arg, self.argmat)
-
-        if system._parent_system:
-            vnames = system._parent_system._relevant_vars
-        else:
-            vnames = system.flat_vars.keys()
-        system.applyJmatmat(vnames, self.argmat, self.resmat, self.global_indices)
-
-        print "arg", self.argmat
-        print "result", self.resmat
-        return self.resmat[system.mpi.rank, :]
-
-
 class PETSc_KSP(LinearSolver):
     """ PETSc's KSP solver with preconditioning. MPI is supported."""
 
@@ -503,6 +440,69 @@ class PETSc_KSP(LinearSolver):
         #system.rhs_vec.array[:] = sol_vec.array[:]
         #system.solve_precon()
         #rhs_vec.array[:] = system.sol_vec.array[:]
+
+
+class MATMAT(PETSc_KSP):
+    """ Special implementation of Scipy's GMRES Solver for simultaneous
+    solution of adjoints under MPI
+    """
+
+    ln_string = 'MATMAT'
+
+    def OLD___init__(self, system):
+        """ Set up ScipyGMRES object """
+
+        if system.mode != 'adjoint':
+            msg = 'The matmat solver only supports the adjoint direction.'
+            raise RuntimeError(msg)
+
+        super(ScipyGMRES, self).__init__(system)
+
+        # We need the whole vector to be local now.
+        # TODO: This won't work with distributed comps
+        self.global_indices = {}
+        n_edge = 0
+        for i, var in enumerate(system.variables):
+            local_sizes = system.local_var_sizes[:, i]
+            istart = n_edge
+            size = local_sizes.max()
+            iend = istart + size
+            self.global_indices[var] = (istart, iend)
+            n_edge += size
+
+        system.rhs_buf = np.zeros((n_edge, ))
+        system.sol_buf = np.zeros((n_edge, ))
+        self.A = LinearOperator((n_edge, n_edge),
+                                matvec=self.mult,
+                                dtype=float)
+
+        self.argmat = np.zeros((system.mpi.size, n_edge))
+        self.resmat = np.zeros((system.mpi.size, n_edge))
+
+    def OLD_mult(self, arg):
+        """ GMRES Callback: applies Jacobian matrix. Mode is determined by the
+        system."""
+
+        system = self._system
+
+        # Start with a clean slate
+        system.rhs_vec.array[:] = 0.0
+        system.clear_dp()
+        self.resmat[:] = 0.0
+
+        # Gather from all gmres instances that are solving separate problems
+        # in parallel
+        system.mpi.comm.Allgather(arg, self.argmat)
+
+        if system._parent_system:
+            vnames = system._parent_system._relevant_vars
+        else:
+            vnames = system.flat_vars.keys()
+        system.applyJmatmat(vnames, self.argmat, self.resmat, self.global_indices)
+
+        print "arg", self.argmat
+        print "result", self.resmat
+        return self.resmat[system.mpi.rank, :]
 
 
 class LinearGS(LinearSolver):
